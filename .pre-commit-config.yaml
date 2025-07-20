@@ -1,0 +1,76 @@
+# Pre-commit hooks configuration
+# Install with: pip install pre-commit && pre-commit install
+
+repos:
+  # Terraform hooks
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.83.5
+    hooks:
+      - id: terraform_fmt
+        description: Formats Terraform files
+      - id: terraform_validate
+        description: Validates Terraform syntax
+      - id: terraform_docs
+        description: Generates Terraform documentation
+        args:
+          - --hook-config=--path-to-file=README.md
+          - --hook-config=--add-to-existing-file=true
+          - --hook-config=--create-file-if-not-exist=true
+
+  # General code formatting
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+        description: Trims trailing whitespace
+      - id: end-of-file-fixer
+        description: Ensures files end with newline
+      - id: check-yaml
+        description: Validates YAML files
+      - id: check-json
+        description: Validates JSON files
+      - id: check-added-large-files
+        description: Prevents large files from being committed
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+        description: Checks for merge conflict markers
+      - id: mixed-line-ending
+        description: Replaces mixed line endings
+
+  # Go hooks
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+        description: Formats Go code
+      - id: go-vet-mod
+        description: Runs go vet
+      - id: go-mod-tidy
+        description: Runs go mod tidy
+
+  # JavaScript/React hooks
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.44.0
+    hooks:
+      - id: eslint
+        description: Lints JavaScript/TypeScript
+        files: \.(js|jsx|ts|tsx)$
+        types: [file]
+        additional_dependencies:
+          - eslint@8.44.0
+          - eslint-plugin-react@7.32.2
+
+  # Docker hooks
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint
+        description: Lints Dockerfiles
+
+  # Security scanning
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        description: Detects secrets in code
+        args: ['--baseline', '.secrets.baseline'] 
