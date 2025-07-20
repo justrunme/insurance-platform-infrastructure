@@ -58,9 +58,9 @@ data "aws_partition" "current" {}
 module "vpc" {
   source = "../../modules/vpc"
 
-  project_name         = var.project_name
-  vpc_cidr             = var.vpc_cidr
-  public_subnet_cidrs  = [
+  project_name = var.project_name
+  vpc_cidr     = var.vpc_cidr
+  public_subnet_cidrs = [
     cidrsubnet(var.vpc_cidr, 8, 1),
     cidrsubnet(var.vpc_cidr, 8, 2),
     cidrsubnet(var.vpc_cidr, 8, 3)
@@ -70,8 +70,8 @@ module "vpc" {
     cidrsubnet(var.vpc_cidr, 8, 20),
     cidrsubnet(var.vpc_cidr, 8, 30)
   ]
-  enable_nat_gateway   = true
-  enable_flow_logs     = true
+  enable_nat_gateway = true
+  enable_flow_logs   = true
 
   common_tags = var.common_tags
 }
@@ -82,7 +82,7 @@ module "eks" {
 
   cluster_name       = "${var.project_name}-${var.environment}"
   kubernetes_version = var.cluster_version
-  
+
   vpc_id             = module.vpc.vpc_id
   vpc_cidr_block     = module.vpc.vpc_cidr_block
   private_subnet_ids = module.vpc.private_subnet_ids
@@ -157,12 +157,12 @@ resource "aws_secretsmanager_secret" "db_password" {
   name                    = "${var.project_name}-${var.environment}-db-password"
   description             = "RDS password for ${var.project_name} ${var.environment}"
   recovery_window_in_days = 7
-  
+
   tags = var.common_tags
 }
 
 resource "aws_secretsmanager_secret_version" "db_password" {
-  secret_id     = aws_secretsmanager_secret.db_password.id
+  secret_id = aws_secretsmanager_secret.db_password.id
   secret_string = jsonencode({
     username = "postgres"
     password = random_password.db_password.result
@@ -183,7 +183,7 @@ resource "aws_db_instance" "main" {
   max_allocated_storage = var.db_max_allocated_storage
   storage_type          = "gp3"
   storage_encrypted     = true
-  kms_key_id           = aws_kms_key.rds.arn
+  kms_key_id            = aws_kms_key.rds.arn
 
   # Database
   db_name  = "insurance_platform"
@@ -197,18 +197,18 @@ resource "aws_db_instance" "main" {
 
   # Backup
   backup_retention_period = var.db_backup_retention_period
-  backup_window          = var.db_backup_window
-  maintenance_window     = var.db_maintenance_window
-  copy_tags_to_snapshot  = true
+  backup_window           = var.db_backup_window
+  maintenance_window      = var.db_maintenance_window
+  copy_tags_to_snapshot   = true
 
   # Monitoring
   performance_insights_enabled = var.enable_enhanced_monitoring
-  monitoring_interval         = var.enable_enhanced_monitoring ? 60 : 0
-  monitoring_role_arn         = var.enable_enhanced_monitoring ? aws_iam_role.rds_monitoring[0].arn : null
+  monitoring_interval          = var.enable_enhanced_monitoring ? 60 : 0
+  monitoring_role_arn          = var.enable_enhanced_monitoring ? aws_iam_role.rds_monitoring[0].arn : null
 
   # Security
-  deletion_protection = true
-  skip_final_snapshot = false
+  deletion_protection       = true
+  skip_final_snapshot       = false
   final_snapshot_identifier = "${var.project_name}-${var.environment}-db-final-snapshot"
 
   # Parameter group for optimization
