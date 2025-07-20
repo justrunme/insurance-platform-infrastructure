@@ -21,6 +21,12 @@ on:
         - dev
         - prod
 
+# Global permissions for the workflow
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
 env:
   AWS_REGION: us-west-2
   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-west-2.amazonaws.com
@@ -30,6 +36,9 @@ jobs:
   # Security Scanning
   security-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -44,9 +53,18 @@ jobs:
 
     - name: Upload Trivy scan results to GitHub Security tab
       uses: github/codeql-action/upload-sarif@v3
-      if: always()
+      if: always() && github.event_name != 'pull_request_target'
       with:
         sarif_file: 'trivy-results.sarif'
+      continue-on-error: true
+
+    - name: Upload Trivy scan results as artifact
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: trivy-results
+        path: trivy-results.sarif
+        retention-days: 30
 
   # Go Application Build and Test
   go-test:
@@ -155,6 +173,9 @@ jobs:
     needs: [security-scan, go-test, react-test, terraform-validate]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       matrix:
         service: [claims-api, client-portal]
@@ -197,6 +218,8 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
