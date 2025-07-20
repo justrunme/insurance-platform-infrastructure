@@ -1,0 +1,245 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-west-2.amazonaws.com
+  EKS_CLUSTER_NAME: insurance-platform-dev
+
+jobs:
+  # Security Scanning
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # Go Application Build and Test
+  go-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./apps/claims-api
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run tests
+      run: go test -v ./...
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Run staticcheck
+      uses: dominikh/staticcheck-action@v1.3.0
+      with:
+        version: "2023.1.6"
+        install-go: false
+        working-directory: apps/claims-api
+
+  # React Application Build and Test
+  react-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./apps/client-portal
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: apps/client-portal/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linting
+      run: npm run lint
+
+    - name: Run tests
+      run: npm test -- --coverage --watchAll=false
+
+    - name: Build application
+      run: npm run build
+
+  # Terraform Validation
+  terraform-validate:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.0
+
+    - name: Terraform Format Check
+      run: terraform fmt -check -recursive
+
+    - name: Terraform Init (Dev)
+      run: |
+        cd terraform/environments/dev
+        terraform init -backend=false
+
+    - name: Terraform Validate (Dev)
+      run: |
+        cd terraform/environments/dev
+        terraform validate
+
+  # Build and Push Docker Images
+  build-and-push:
+    needs: [security-scan, go-test, react-test, terraform-validate]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      matrix:
+        service: [claims-api, client-portal]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build, tag, and push image to Amazon ECR
+      env:
+        ECR_REPOSITORY: insurance-platform/${{ matrix.service }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        cd apps/${{ matrix.service }}
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  # Deploy to Development
+  deploy-dev:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
+
+    - name: Update image tags in ArgoCD applications
+      run: |
+        # Update image tags in Kubernetes manifests
+        sed -i "s|image: insurance-platform/claims-api:.*|image: $ECR_REGISTRY/insurance-platform/claims-api:${{ github.sha }}|g" apps/claims-api/deployments/k8s/deployment.yaml
+        sed -i "s|image: insurance-platform/client-portal:.*|image: $ECR_REGISTRY/insurance-platform/client-portal:${{ github.sha }}|g" apps/client-portal/deployments/k8s/deployment.yaml
+
+    - name: Commit and push updated manifests
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: 'Update image tags to ${{ github.sha }}'
+        file_pattern: 'apps/*/deployments/k8s/deployment.yaml'
+
+  # Infrastructure Deployment
+  deploy-infrastructure:
+    needs: terraform-validate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.0
+
+    - name: Terraform Init
+      run: |
+        cd terraform/environments/dev
+        terraform init
+
+    - name: Terraform Plan
+      run: |
+        cd terraform/environments/dev
+        terraform plan -no-color
+
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main'
+      run: |
+        cd terraform/environments/dev
+        terraform apply -auto-approve
+
+  # Notify Slack
+  notify:
+    needs: [deploy-dev, deploy-infrastructure]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+    - name: Slack Notification
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        channel: '#deployments'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }} 

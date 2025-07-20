@@ -1,0 +1,308 @@
+# Prometheus and Grafana stack configuration for insurance platform monitoring
+# This file contains values for kube-prometheus-stack Helm chart
+
+# Global settings
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Prometheus Configuration
+prometheus:
+  enabled: true
+  
+  prometheusSpec:
+    replicas: 2
+    retention: 30d
+    retentionSize: "50GiB"
+    
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: "gp2"
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+    
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1000m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+    
+    # Additional scrape configs for insurance platform
+    additionalScrapeConfigs:
+    - job_name: 'claims-api'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - insurance-platform
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: claims-api
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: http
+    
+    - job_name: 'client-portal'
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - insurance-platform
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: client-portal
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: http
+
+# Alertmanager Configuration
+alertmanager:
+  enabled: true
+  
+  alertmanagerSpec:
+    replicas: 2
+    retention: 120h
+    
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: "gp2"
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+    
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "200m"
+
+  config:
+    global:
+      smtp_smarthost: 'localhost:587'
+      smtp_from: 'alerts@insurance-platform.com'
+    
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 1h
+      receiver: 'web.hook'
+      routes:
+      - match:
+          alertname: Watchdog
+        receiver: 'null'
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+      - match:
+          severity: warning
+        receiver: 'warning-alerts'
+    
+    receivers:
+    - name: 'null'
+    - name: 'web.hook'
+      webhook_configs:
+      - url: 'http://alertmanager-webhook:5000/alerts'
+    - name: 'critical-alerts'
+      email_configs:
+      - to: 'critical-alerts@insurance-platform.com'
+        subject: 'CRITICAL: {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          {{ end }}
+      slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#critical-alerts'
+        title: 'Critical Alert'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+    - name: 'warning-alerts'
+      email_configs:
+      - to: 'warnings@insurance-platform.com'
+        subject: 'WARNING: {{ .GroupLabels.alertname }}'
+
+# Grafana Configuration
+grafana:
+  enabled: true
+  
+  replicas: 2
+  
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+  
+  persistence:
+    enabled: true
+    storageClassName: "gp2"
+    size: 10Gi
+  
+  admin:
+    user: admin
+    password: admin # Change this in production
+  
+  # Grafana configuration
+  grafana.ini:
+    server:
+      domain: grafana.insurance-platform.local
+      root_url: https://grafana.insurance-platform.local
+    security:
+      disable_gravatar: true
+    users:
+      allow_sign_up: false
+      auto_assign_org: true
+      auto_assign_org_role: Viewer
+    auth.anonymous:
+      enabled: false
+    auth.github:
+      enabled: false
+    smtp:
+      enabled: true
+      host: localhost:587
+      user: alerts@insurance-platform.com
+      from_address: alerts@insurance-platform.com
+      from_name: Insurance Platform Grafana
+  
+  # Default dashboards
+  dashboards:
+    default:
+      kubernetes-cluster:
+        gnetId: 7249
+        revision: 1
+        datasource: Prometheus
+      node-exporter:
+        gnetId: 1860
+        revision: 27
+        datasource: Prometheus
+      postgres:
+        gnetId: 9628
+        revision: 7
+        datasource: Prometheus
+      golang:
+        gnetId: 10826
+        revision: 1
+        datasource: Prometheus
+      nginx:
+        gnetId: 9614
+        revision: 1
+        datasource: Prometheus
+  
+  # Custom dashboards for insurance platform
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+      - name: 'insurance-platform'
+        orgId: 1
+        folder: 'Insurance Platform'
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/insurance-platform
+  
+  dashboardsConfigMaps:
+    insurance-platform: "insurance-platform-dashboards"
+
+# Node Exporter
+nodeExporter:
+  enabled: true
+  
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+# Kube State Metrics
+kubeStateMetrics:
+  enabled: true
+  
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+# Prometheus Operator
+prometheusOperator:
+  enabled: true
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "200m"
+  
+  # Admission webhooks
+  admissionWebhooks:
+    enabled: true
+    patch:
+      enabled: true
+
+# Additional monitoring rules for insurance platform
+additionalPrometheusRulesMap:
+  insurance-platform-rules:
+    groups:
+    - name: insurance-platform.rules
+      rules:
+      - alert: ClaimsAPIDown
+        expr: up{job="claims-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Claims API is down"
+          description: "Claims API has been down for more than 1 minute"
+      
+      - alert: HighClaimsAPILatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="claims-api"}[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency on Claims API"
+          description: "95th percentile latency is above 500ms"
+      
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{job="claims-api",status=~"5.."}[5m]) / rate(http_requests_total{job="claims-api"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on Claims API"
+          description: "Error rate is above 10%"
+      
+      - alert: DatabaseConnectionsHigh
+        expr: postgres_stat_activity_count{job="postgres"} > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of database connections"
+          description: "Number of database connections is above 80"
+
+# Service monitors for custom applications
+serviceMonitor:
+  enabled: true 
