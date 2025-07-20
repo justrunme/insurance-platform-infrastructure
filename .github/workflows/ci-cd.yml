@@ -168,11 +168,32 @@ jobs:
         cd terraform/environments/prod
         terraform validate
 
+  # Local Docker Build (without AWS)
+  docker-build:
+    needs: [go-test, react-test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && vars.AWS_ENABLED != 'true'
+    strategy:
+      matrix:
+        service: [claims-api, client-portal]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      run: |
+        cd apps/${{ matrix.service }}
+        docker build -t ${{ matrix.service }}:${{ github.sha }} .
+        echo "✅ Successfully built ${{ matrix.service }}:${{ github.sha }}"
+
   # Build and Push Docker Images
   build-and-push:
     needs: [security-scan, go-test, react-test, terraform-validate]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.AWS_ENABLED == 'true'
     permissions:
       contents: read
       id-token: write
@@ -217,7 +238,7 @@ jobs:
   deploy-dev:
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.AWS_ENABLED == 'true'
     permissions:
       contents: write
     steps:
@@ -260,7 +281,7 @@ jobs:
   deploy-infrastructure:
     needs: terraform-validate
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[deploy-infra]')
+    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[deploy-infra]') && vars.AWS_ENABLED == 'true'
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -351,7 +372,7 @@ jobs:
   deploy-production:
     needs: [security-scan, go-test, react-test, terraform-validate]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && vars.AWS_ENABLED == 'true'
     environment: production
     steps:
     - name: Checkout code
