@@ -1,5 +1,9 @@
 # Insurance Platform Infrastructure
 
+[![Case study](https://img.shields.io/badge/case-justrunme.com-111111)](https://justrunme.com/cases/terraform-platform-modules/)
+
+Case study: [Terraform Platform Modules](https://justrunme.com/cases/terraform-platform-modules/) · [Andrey Lesnikov](https://justrunme.com/)
+
 This is a realistic DevOps project demonstrating secure insurance platform infrastructure with modern cloud-native technologies.
 
 ## 🏗️ Architecture
