@@ -1,26 +1,26 @@
 # Terraform configuration
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.16"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.23"
+      version = "~> 2.35"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 2.11"
+      version = "~> 2.17"
     }
     tls = {
       source  = "hashicorp/tls"
-      version = ">= 3.0"
+      version = "~> 4.0"
     }
     random = {
       source  = "hashicorp/random"
-      version = ">= 3.1"
+      version = "~> 3.6"
     }
   }
 
@@ -49,10 +49,6 @@ resource "random_string" "bucket_suffix" {
   special = false
   upper   = false
 }
-
-# Data sources
-data "aws_caller_identity" "current" {}
-data "aws_partition" "current" {}
 
 # VPC Module
 module "vpc" {

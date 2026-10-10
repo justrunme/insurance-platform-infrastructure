@@ -1,3 +1,14 @@
+terraform {
+  required_version = ">= 1.16"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 6.0"
+    }
+  }
+}
+
 # EKS Module for Insurance Platform
 # Provides secure Kubernetes cluster with worker nodes
 
@@ -134,9 +145,12 @@ resource "aws_eks_node_group" "main" {
     max_unavailable = var.max_unavailable
   }
 
-  remote_access {
-    ec2_ssh_key               = var.key_pair_name
-    source_security_group_ids = [aws_security_group.node_group.id]
+  dynamic "remote_access" {
+    for_each = var.key_pair_name == null ? [] : [1]
+    content {
+      ec2_ssh_key               = var.key_pair_name
+      source_security_group_ids = [aws_security_group.node_group.id]
+    }
   }
 
   # Ensure that IAM Role permissions are created before and deleted after EKS Node Group handling.

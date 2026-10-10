@@ -6,7 +6,7 @@ variable "cluster_name" {
 variable "kubernetes_version" {
   description = "Kubernetes version for EKS cluster"
   type        = string
-  default     = "1.28"
+  default     = "1.34"
 }
 
 variable "vpc_id" {
@@ -74,7 +74,7 @@ variable "capacity_type" {
 variable "ami_type" {
   description = "Type of Amazon Machine Image (AMI) associated with the EKS Node Group"
   type        = string
-  default     = "AL2_x86_64"
+  default     = "AL2023_x86_64_STANDARD"
 }
 
 variable "desired_capacity" {
