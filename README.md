@@ -6,6 +6,7 @@ Terraform modules and sample apps for a rebuildable insurance platform foundatio
 [![Release](https://img.shields.io/github/v/release/justrunme/insurance-platform-infrastructure?display_name=tag)](https://github.com/justrunme/insurance-platform-infrastructure/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Case study](https://img.shields.io/badge/case-justrunme.com-111111)](https://justrunme.com/cases/terraform-platform-modules/)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/justrunme/insurance-platform-infrastructure/badge)](https://securityscorecards.dev/viewer/?uri=github.com/justrunme/insurance-platform-infrastructure)
 
 Case study: [Terraform Platform Modules](https://justrunme.com/cases/terraform-platform-modules/) · [Andrey Lesnikov](https://justrunme.com/)
 
