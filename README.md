@@ -1,10 +1,32 @@
 # Insurance Platform Infrastructure
 
-[![Case study](https://img.shields.io/badge/case-justrunme.com-111111)](https://justrunme.com/cases/terraform-platform-modules/)
+Terraform modules and sample apps for a rebuildable insurance platform foundation.
+
+[![CI](https://github.com/justrunme/insurance-platform-infrastructure/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/justrunme/insurance-platform-infrastructure/actions/workflows/ci-cd.yml)
+[![Release](https://img.shields.io/github/v/release/justrunme/insurance-platform-infrastructure?display_name=tag)](https://github.com/justrunme/insurance-platform-infrastructure/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Case study: [Terraform Platform Modules](https://justrunme.com/cases/terraform-platform-modules/) · [Andrey Lesnikov](https://justrunme.com/)
 
-DevOps sample for an insurance platform: Terraform for AWS networking and EKS, containerized apps, GitOps manifests, and GitHub Actions CI/CD.
+## What it does
+
+- Defines Terraform modules for VPC/EKS and environment stacks (RDS, ECR, S3)
+- Includes sample Claims API (Go) and Client Portal (React) with Argo CD application manifests
+- Runs GitHub Actions CI for lint/test, Trivy, and optional AWS deploy jobs
+
+## Why
+
+- Insurance-style platforms need repeatable networking and EKS foundations, not one-off click-ops
+- App and GitOps manifests stay in-repo so infrastructure changes can be rehearsed locally
+
+## Quickstart
+
+```bash
+make setup
+make test
+make lint
+make docker-build
+```
 
 ## Architecture
 
