@@ -30,6 +30,19 @@ make docker-build
 
 ## Architecture
 
+```mermaid
+flowchart TB
+  Modules[terraform/modules VPC EKS] --> Env[terraform/environments]
+  Env --> EKS[EKS cluster]
+  Env --> RDS[(RDS PostgreSQL)]
+  Env --> ECR[ECR]
+  Apps[apps/claims-api + client-portal] --> ECR
+  Argo[argo/applications] --> EKS
+  Mon[monitoring/helm kube-prometheus-stack] --> EKS
+  CI[.github/workflows/ci-cd.yml] --> Apps
+  CI --> Modules
+```
+
 ### Infrastructure
 - **Infrastructure as Code**: Terraform modules for VPC and EKS; RDS, ECR, and S3 defined per environment
 - **Container Orchestration**: AWS EKS
