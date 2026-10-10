@@ -2,20 +2,28 @@
 # This configuration creates a complete insurance platform infrastructure
 
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.16"
 
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.23"
+      version = "~> 2.35"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 2.11"
+      version = "~> 2.17"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
     }
   }
 
@@ -72,11 +80,6 @@ locals {
     Owner       = "devops-team"
     CostCenter  = "insurance-platform"
   }
-}
-
-# Data sources
-data "aws_availability_zones" "available" {
-  state = "available"
 }
 
 # VPC Module

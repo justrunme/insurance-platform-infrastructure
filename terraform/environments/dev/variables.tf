@@ -52,7 +52,7 @@ variable "enable_flow_logs" {
 variable "kubernetes_version" {
   description = "Kubernetes version for EKS cluster"
   type        = string
-  default     = "1.28"
+  default     = "1.34"
 }
 
 variable "endpoint_private_access" {

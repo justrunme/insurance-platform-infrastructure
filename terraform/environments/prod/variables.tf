@@ -24,17 +24,11 @@ variable "vpc_cidr" {
   default     = "10.0.0.0/16"
 }
 
-variable "availability_zones" {
-  description = "Availability zones"
-  type        = list(string)
-  default     = ["us-west-2a", "us-west-2b", "us-west-2c"]
-}
-
 # EKS Configuration
 variable "cluster_version" {
   description = "Kubernetes cluster version"
   type        = string
-  default     = "1.29"
+  default     = "1.34"
 }
 
 variable "node_group_instance_types" {
@@ -101,13 +95,6 @@ variable "db_maintenance_window" {
 # Monitoring Configuration
 variable "enable_enhanced_monitoring" {
   description = "Enable enhanced monitoring"
-  type        = bool
-  default     = true # Always enabled for production
-}
-
-# Security Configuration
-variable "enable_cluster_encryption" {
-  description = "Enable EKS cluster encryption"
   type        = bool
   default     = true # Always enabled for production
 }

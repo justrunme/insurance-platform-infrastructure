@@ -4,40 +4,38 @@
 
 Case study: [Terraform Platform Modules](https://justrunme.com/cases/terraform-platform-modules/) · [Andrey Lesnikov](https://justrunme.com/)
 
-This is a realistic DevOps project demonstrating secure insurance platform infrastructure with modern cloud-native technologies.
+DevOps sample for an insurance platform: Terraform for AWS networking and EKS, containerized apps, GitOps manifests, and GitHub Actions CI/CD.
 
-## 🏗️ Architecture
+## Architecture
 
-### Infrastructure Components
-- **Infrastructure as Code**: Terraform modules for VPC, EKS, RDS
-- **Container Orchestration**: AWS EKS with Kubernetes
-- **GitOps Deployment**: ArgoCD for automated deployments
-- **Service Mesh**: Istio for secure service communication
-- **Monitoring Stack**: Prometheus, Grafana, Loki, Alertmanager
-- **Security**: OPA Gatekeeper, Trivy scanning, Vault secrets management
+### Infrastructure
+- **Infrastructure as Code**: Terraform modules for VPC and EKS; RDS, ECR, and S3 defined per environment
+- **Container Orchestration**: AWS EKS
+- **GitOps**: Argo CD application manifests under `argo/applications/`
+- **Monitoring**: kube-prometheus-stack Helm values (Prometheus, Grafana, Alertmanager)
+- **Security scanning**: Trivy in CI; encrypted RDS and EKS secrets via KMS
 
 ### Application Services
-- **Claims API**: Go microservice with Gin framework
-- **Client Portal**: React frontend with Material-UI
-- **Database**: PostgreSQL on AWS RDS with encryption
-- **Container Registry**: AWS ECR with image scanning
+- **Claims API**: Go service (Gin) under `apps/claims-api`
+- **Client Portal**: React (Create React App + Material UI) under `apps/client-portal`
+- **Database**: PostgreSQL on Amazon RDS (environment Terraform)
+- **Container Registry**: Amazon ECR repositories (environment Terraform)
 
-### Security & Compliance
-- **Security Scanning**: Trivy for vulnerabilities, dependency checks
-- **Secrets Management**: HashiCorp Vault integration
-- **Network Security**: VPC, security groups, network policies
-- **Compliance**: GDPR, ISO 27001, SOC 2 ready
-- **RBAC**: Kubernetes role-based access control
+### Security
+- Trivy filesystem scan in CI (SARIF upload)
+- Non-root container images
+- VPC isolation and security groups for EKS/RDS
+- Kubernetes RBAC and service accounts in manifests
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
-- Docker and Docker Compose
-- kubectl and helm
-- Terraform >= 1.6
-- Go >= 1.21
-- Node.js >= 18
-- Minikube (for local testing)
+- Docker
+- kubectl
+- Terraform >= 1.16
+- Go >= 1.27
+- Node.js >= 24
+- Optional: Minikube or another local cluster for `make k8s-deploy`
 
 ### Local Development
 
@@ -63,36 +61,28 @@ This is a realistic DevOps project demonstrating secure insurance platform infra
    make docker-build
    ```
 
-5. **Deploy to local Minikube**
+5. **Deploy local Kubernetes manifests**
    ```bash
-   make k8s-deploy-local
+   make k8s-deploy
    ```
 
 ### AWS Deployment Setup
 
-To enable AWS deployment in GitHub Actions, you need to configure the following:
+To enable AWS deployment in GitHub Actions, configure:
 
-1. **Set Repository Variables**
-   - Go to your GitHub repository → Settings → Secrets and variables → Actions
-   - Under "Variables" tab, add:
-     - `AWS_ENABLED`: Set to `true` to enable AWS deployment
-     - `AWS_REGION`: Your preferred AWS region (e.g., `us-west-2`)
+1. **Repository variables**
+   - `AWS_ENABLED`: `true` to enable AWS jobs
+   - `AWS_REGION`: e.g. `us-west-2` (workflow default)
 
-2. **Set Repository Secrets**
-   - Under "Secrets" tab, add:
-     - `AWS_ACCESS_KEY_ID`: Your AWS access key
-     - `AWS_SECRET_ACCESS_KEY`: Your AWS secret key
-     - `SLACK_WEBHOOK_URL`: For deployment notifications (optional)
+2. **Repository secrets**
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_ACCOUNT_ID` (for ECR registry URL)
+   - `SLACK_WEBHOOK` (optional notifications)
 
-3. **AWS IAM Permissions**
-   Your AWS user/role needs permissions for:
-   - EKS cluster management
-   - ECR repository access
-   - VPC and networking
-   - RDS database management
-   - S3 for Terraform state (if using remote backend)
+3. **IAM permissions** for EKS, ECR, VPC, RDS, and S3 (Terraform state if using a remote backend)
 
-4. **Terraform Backend (Optional)**
+4. **Optional S3 backend** (uncomment in environment `main.tf`):
    ```hcl
    terraform {
      backend "s3" {
@@ -105,98 +95,72 @@ To enable AWS deployment in GitHub Actions, you need to configure the following:
 
 ### Manual Deployment Commands
 
-**Infrastructure Deployment:**
+**Infrastructure:**
 ```bash
-# Deploy development environment
+# Development: include [deploy-infra] in the commit message on main when AWS_ENABLED=true
 git commit -m "Deploy dev infrastructure [deploy-infra]"
 git push
 
-# Deploy production (manual trigger required)
-# Go to Actions → Deploy Production → Run workflow
+# Production: Actions → CI/CD Pipeline → Run workflow (manual)
 ```
 
-**Application Deployment:**
+**Applications:**
 ```bash
-# Automatic deployment on main branch push
+# On main with AWS_ENABLED=true: build/push to ECR and update GitOps manifests
 git push origin main
 ```
 
-## 🛠️ Development Workflow
+## Development Workflow
 
-### Available Make Commands
+### Make targets
 ```bash
-make help              # Show all available commands
-make setup             # Install development dependencies
-make test              # Run all tests
-make lint              # Run linting and formatting
-make docker-build      # Build Docker images
-make docker-run        # Run services with Docker Compose
-make terraform-init    # Initialize Terraform
-make terraform-plan    # Plan infrastructure changes
-make k8s-deploy-local  # Deploy to Minikube
-make security-scan     # Run security scans
-make pre-commit-install # Install pre-commit hooks
+make help               # List targets
+make setup              # Install local dependencies
+make test               # Go + React tests
+make lint               # Terraform fmt check, go vet, eslint
+make docker-build       # Build service images
+make docker-run         # Run local containers
+make terraform-init     # terraform init (dev)
+make terraform-plan     # terraform plan (dev)
+make terraform-validate # validate dev and prod
+make k8s-deploy         # Apply local/Argo manifests
+make security-scan      # Trivy fs scan (if installed)
+make pre-commit         # Run pre-commit hooks
 ```
 
 ### CI/CD Pipeline
 
-The GitHub Actions workflow includes:
+GitHub Actions (`.github/workflows/ci-cd.yml`):
 
-**Without AWS (Default):**
-- Code quality checks (linting, formatting)
-- Security scanning with Trivy
-- Unit tests (Go, React)
-- Terraform validation
-- Local Docker builds
+**Default (no AWS):**
+- Trivy scan
+- `go test` / `go vet` / staticcheck for `apps/claims-api`
+- `npm` lint, test, and build for `apps/client-portal`
+- `terraform fmt -check`, TFLint, `terraform validate` for `terraform/`
+- Docker image builds on `main` when `AWS_ENABLED` is not `true`
 
-**With AWS (when `AWS_ENABLED=true`):**
-- All of the above, plus:
-- Build and push to AWS ECR
-- Deploy to EKS development environment
-- Infrastructure deployment with Terraform
-- Production deployment (manual trigger)
+**With `AWS_ENABLED=true` on `main`:**
+- Build and push to ECR
+- Update image tags in Kubernetes/Argo manifests
+- Optional infra apply when the commit message contains `[deploy-infra]`
+- Production plan via `workflow_dispatch`
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 ├── apps/
-│   ├── claims-api/          # Go microservice
+│   ├── claims-api/          # Go microservice (+ deployments/k8s)
 │   └── client-portal/       # React frontend
 ├── terraform/
-│   ├── modules/             # Reusable Terraform modules
-│   └── environments/        # Environment-specific configs
-├── kubernetes/
-│   ├── base/                # Base Kubernetes manifests
-│   └── overlays/            # Kustomize overlays
-├── .github/workflows/       # CI/CD pipelines
-├── Makefile                 # Development commands
-└── docker-compose.yml       # Local development stack
+│   ├── modules/             # vpc, eks
+│   └── environments/        # dev, prod
+├── argo/applications/       # Argo CD Application manifests
+├── monitoring/helm/         # Prometheus/Grafana Helm values
+├── docs/                    # Deployment and security notes
+├── .github/workflows/       # CI/CD
+└── Makefile
 ```
 
-## 🔒 Security Features
+## License
 
-- **Container Security**: Trivy scanning, non-root containers
-- **Network Security**: VPC isolation, security groups
-- **Secrets Management**: Vault integration, encrypted storage
-- **Access Control**: RBAC, service accounts
-- **Audit Logging**: CloudWatch, audit trails
-- **Compliance**: GDPR, SOC 2, ISO 27001 ready
-
-## 📊 Monitoring
-
-- **Metrics**: Prometheus with custom business metrics
-- **Logs**: Centralized logging with Loki
-- **Tracing**: Distributed tracing with Jaeger
-- **Dashboards**: Grafana with pre-built dashboards
-- **Alerting**: Alertmanager with Slack integration
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Run tests and linting
-4. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License. 
+MIT License — see [LICENSE](LICENSE).

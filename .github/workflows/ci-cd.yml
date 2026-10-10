@@ -21,7 +21,6 @@ on:
         - dev
         - prod
 
-# Global permissions for the workflow
 permissions:
   contents: read
   security-events: write
@@ -31,9 +30,10 @@ env:
   AWS_REGION: us-west-2
   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-west-2.amazonaws.com
   EKS_CLUSTER_NAME: insurance-platform-dev
+  TF_VERSION: 1.16.5
+  TFLINT_VERSION: v0.59.1
 
 jobs:
-  # Security Scanning
   security-scan:
     runs-on: ubuntu-latest
     permissions:
@@ -41,10 +41,10 @@ jobs:
       security-events: write
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@v0.36.0
       with:
         scan-type: 'fs'
         scan-ref: '.'
@@ -52,21 +52,19 @@ jobs:
         output: 'trivy-results.sarif'
 
     - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       if: always() && github.event_name != 'pull_request_target'
       with:
         sarif_file: 'trivy-results.sarif'
-      continue-on-error: true
 
     - name: Upload Trivy scan results as artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       if: always()
       with:
         name: trivy-results
         path: trivy-results.sarif
         retention-days: 30
 
-  # Go Application Build and Test
   go-test:
     runs-on: ubuntu-latest
     defaults:
@@ -74,20 +72,13 @@ jobs:
         working-directory: ./apps/claims-api
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
-        go-version: '1.21'
-
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('apps/claims-api/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
+        go-version: '1.27'
+        cache-dependency-path: apps/claims-api/go.sum
 
     - name: Download dependencies
       run: go mod download
@@ -99,12 +90,12 @@ jobs:
       run: go vet ./...
 
     - name: Install staticcheck
-      run: go install honnef.co/go/tools/cmd/staticcheck@latest
+      # Use master until a release supports the Go 1.27 export data format
+      run: go install honnef.co/go/tools/cmd/staticcheck@master
 
     - name: Run staticcheck
       run: staticcheck ./...
 
-  # React Application Build and Test
   react-test:
     runs-on: ubuntu-latest
     defaults:
@@ -112,41 +103,54 @@ jobs:
         working-directory: ./apps/client-portal
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
-        node-version: '18'
+        node-version: '24'
         cache: 'npm'
         cache-dependency-path: 'apps/client-portal/package-lock.json'
 
     - name: Install dependencies
       run: npm ci
 
-    - name: Run linting (if available)
-      run: npm run lint || echo "Lint script not available, skipping..."
+    - name: Run linting
+      run: npm run lint
 
-    - name: Run tests (if available)
-      run: npm test -- --coverage --watchAll=false || echo "Test script not available, skipping..."
+    - name: Run tests
+      run: npm test -- --coverage --watchAll=false
 
     - name: Build application
       run: npm run build
 
-  # Terraform Validation
   terraform-validate:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.9.8
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Setup TFLint
+      uses: terraform-linters/setup-tflint@v6
+      with:
+        tflint_version: ${{ env.TFLINT_VERSION }}
 
     - name: Terraform Format Check
       run: terraform fmt -check -recursive terraform/
+
+    - name: Init TFLint
+      run: tflint --init --config "$GITHUB_WORKSPACE/terraform/.tflint.hcl"
+
+    - name: TFLint (Dev)
+      run: tflint --config "$GITHUB_WORKSPACE/terraform/.tflint.hcl" --chdir terraform/environments/dev
+
+    - name: TFLint (Prod)
+      run: tflint --config "$GITHUB_WORKSPACE/terraform/.tflint.hcl" --chdir terraform/environments/prod
 
     - name: Terraform Init (Dev)
       run: |
@@ -168,7 +172,6 @@ jobs:
         cd terraform/environments/prod
         terraform validate
 
-  # Local Docker Build (without AWS)
   docker-build:
     needs: [go-test, react-test]
     runs-on: ubuntu-latest
@@ -178,7 +181,7 @@ jobs:
         service: [claims-api, client-portal]
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -187,9 +190,7 @@ jobs:
       run: |
         cd apps/${{ matrix.service }}
         docker build -t ${{ matrix.service }}:${{ github.sha }} .
-        echo "✅ Successfully built ${{ matrix.service }}:${{ github.sha }}"
 
-  # Build and Push Docker Images
   build-and-push:
     needs: [security-scan, go-test, react-test, terraform-validate]
     runs-on: ubuntu-latest
@@ -202,7 +203,7 @@ jobs:
         service: [claims-api, client-portal]
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -234,7 +235,6 @@ jobs:
         docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
         docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
 
-  # Deploy to Development (GitOps approach)
   deploy-dev:
     needs: build-and-push
     runs-on: ubuntu-latest
@@ -243,7 +243,7 @@ jobs:
       contents: write
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -251,20 +251,18 @@ jobs:
       env:
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        # Update deployment files
         if [ -f "apps/claims-api/deployments/k8s/deployment.yaml" ]; then
           sed -i "s|image: .*claims-api:.*|image: ${{ env.ECR_REGISTRY }}/insurance-platform/claims-api:${{ env.IMAGE_TAG }}|g" apps/claims-api/deployments/k8s/deployment.yaml
         fi
-        
+
         if [ -f "apps/client-portal/deployments/k8s/deployment.yaml" ]; then
           sed -i "s|image: .*client-portal:.*|image: ${{ env.ECR_REGISTRY }}/insurance-platform/client-portal:${{ env.IMAGE_TAG }}|g" apps/client-portal/deployments/k8s/deployment.yaml
         fi
 
-        # Update ArgoCD application files
         if [ -f "argo/applications/claims-api.yaml" ]; then
           sed -i "s|tag: .*|tag: ${{ env.IMAGE_TAG }}|g" argo/applications/claims-api.yaml
         fi
-        
+
         if [ -f "argo/applications/client-portal.yaml" ]; then
           sed -i "s|tag: .*|tag: ${{ env.IMAGE_TAG }}|g" argo/applications/client-portal.yaml
         fi
@@ -277,14 +275,13 @@ jobs:
         commit_user_name: github-actions[bot]
         commit_user_email: github-actions[bot]@users.noreply.github.com
 
-  # Infrastructure Deployment (Dev Environment)
   deploy-infrastructure:
     needs: terraform-validate
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[deploy-infra]') && vars.AWS_ENABLED == 'true'
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
@@ -296,7 +293,7 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.9.8
+        terraform_version: ${{ env.TF_VERSION }}
 
     - name: Terraform Init
       run: |
@@ -313,7 +310,6 @@ jobs:
         cd terraform/environments/dev
         terraform apply -auto-approve tfplan
 
-  # Notify on completion
   notify:
     needs: [deploy-dev]
     runs-on: ubuntu-latest
@@ -323,10 +319,10 @@ jobs:
       id: status
       run: |
         if [[ "${{ needs.deploy-dev.result }}" == "success" ]]; then
-          echo "status=✅ SUCCESS" >> $GITHUB_OUTPUT
+          echo "status=SUCCESS" >> $GITHUB_OUTPUT
           echo "color=good" >> $GITHUB_OUTPUT
         else
-          echo "status=❌ FAILED" >> $GITHUB_OUTPUT
+          echo "status=FAILED" >> $GITHUB_OUTPUT
           echo "color=danger" >> $GITHUB_OUTPUT
         fi
 
@@ -348,7 +344,7 @@ jobs:
                   "short": true
                 },
                 {
-                  "title": "Branch", 
+                  "title": "Branch",
                   "value": "${{ github.ref_name }}",
                   "short": true
                 },
@@ -368,7 +364,6 @@ jobs:
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
-  # Manual Production Deployment
   deploy-production:
     needs: [security-scan, go-test, react-test, terraform-validate]
     runs-on: ubuntu-latest
@@ -376,9 +371,9 @@ jobs:
     environment: production
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
-    - name: Configure AWS credentials  
+    - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -388,7 +383,7 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.9.8
+        terraform_version: ${{ env.TF_VERSION }}
 
     - name: Terraform Plan (Production)
       run: |
@@ -397,4 +392,4 @@ jobs:
         terraform plan -no-color
 
     - name: Manual Approval Required
-      run: echo "Manual approval required for production deployment" 
+      run: echo "Manual approval required for production deployment"

@@ -1,0 +1,82 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /apps/claims-api
+    schedule:
+      interval: monthly
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /apps/client-portal
+    schedule:
+      interval: monthly
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directory: /apps/claims-api
+    schedule:
+      interval: monthly
+    groups:
+      docker-claims-api:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directory: /apps/client-portal
+    schedule:
+      interval: monthly
+    groups:
+      docker-client-portal:
+        patterns:
+          - "*"
+
+  - package-ecosystem: terraform
+    directory: /terraform/environments/dev
+    schedule:
+      interval: monthly
+    groups:
+      terraform-dev:
+        patterns:
+          - "*"
+
+  - package-ecosystem: terraform
+    directory: /terraform/environments/prod
+    schedule:
+      interval: monthly
+    groups:
+      terraform-prod:
+        patterns:
+          - "*"
+
+  - package-ecosystem: terraform
+    directory: /terraform/modules/eks
+    schedule:
+      interval: monthly
+    groups:
+      terraform-eks:
+        patterns:
+          - "*"
+
+  - package-ecosystem: terraform
+    directory: /terraform/modules/vpc
+    schedule:
+      interval: monthly
+    groups:
+      terraform-vpc:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
