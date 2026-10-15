@@ -38,6 +38,9 @@ updates:
       docker-client-portal:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: terraform
     directory: /terraform/environments/dev
