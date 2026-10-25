@@ -23,8 +23,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
-  actions: read
 
 env:
   AWS_REGION: us-west-2
@@ -38,13 +36,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      actions: read # required by codeql-action/upload-sarif on private repos
+      security-events: write # upload Trivy SARIF to GitHub code scanning
     steps:
     - name: Checkout code
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@v0.36.0
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
       with:
         scan-type: 'fs'
         scan-ref: '.'
@@ -52,13 +51,13 @@ jobs:
         output: 'trivy-results.sarif'
 
     - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v4
+      uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       if: always() && github.event_name != 'pull_request_target'
       with:
         sarif_file: 'trivy-results.sarif'
 
     - name: Upload Trivy scan results as artifact
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       if: always()
       with:
         name: trivy-results
@@ -72,10 +71,10 @@ jobs:
         working-directory: ./apps/claims-api
     steps:
     - name: Checkout code
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Set up Go
-      uses: actions/setup-go@v7
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version: '1.27'
         cache-dependency-path: apps/claims-api/go.sum
@@ -103,10 +102,10 @@ jobs:
         working-directory: ./apps/client-portal
     steps:
     - name: Checkout code
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Set up Node.js
-      uses: actions/setup-node@v7
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: '24'
         cache: 'npm'
@@ -128,15 +127,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v4
+      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
       with:
         terraform_version: ${{ env.TF_VERSION }}
 
     - name: Setup TFLint
-      uses: terraform-linters/setup-tflint@v6
+      uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
       with:
         tflint_version: ${{ env.TFLINT_VERSION }}
 
@@ -181,10 +180,10 @@ jobs:
         service: [claims-api, client-portal]
     steps:
     - name: Checkout code
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v4
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
     - name: Build Docker image
       run: |
@@ -195,21 +194,18 @@ jobs:
     needs: [security-scan, go-test, react-test, terraform-validate]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && vars.AWS_ENABLED == 'true'
-    permissions:
-      contents: read
-      id-token: write
     strategy:
       matrix:
         service: [claims-api, client-portal]
     steps:
     - name: Checkout code
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v4
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v6
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -217,7 +213,7 @@ jobs:
 
     - name: Login to Amazon ECR
       id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
+      uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
 
     - name: Create ECR repository if it doesn't exist
       run: |
@@ -240,10 +236,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && vars.AWS_ENABLED == 'true'
     permissions:
-      contents: write
+      contents: write # git-auto-commit-action pushes updated image tags
     steps:
     - name: Checkout code
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -268,7 +264,7 @@ jobs:
         fi
 
     - name: Commit and push updated manifests
-      uses: stefanzweifel/git-auto-commit-action@v7
+      uses: stefanzweifel/git-auto-commit-action@d0b01107b5db882071f96de5dd4b54961ea93f4c # v7.2.1
       with:
         commit_message: 'ci: update image tags to ${{ github.sha }}'
         file_pattern: 'apps/*/deployments/k8s/deployment.yaml argo/applications/*.yaml'
@@ -281,17 +277,17 @@ jobs:
     if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[deploy-infra]') && vars.AWS_ENABLED == 'true'
     steps:
     - name: Checkout code
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v6
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v4
+      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
       with:
         terraform_version: ${{ env.TF_VERSION }}
 
@@ -327,7 +323,7 @@ jobs:
         fi
 
     - name: Slack Notification
-      uses: 8398a7/action-slack@v3
+      uses: 8398a7/action-slack@77eaa4f1c608a7d68b38af4e3f739dcd8cba273e # v3.19.0
       if: env.SLACK_WEBHOOK_URL != ''
       with:
         status: custom
@@ -371,17 +367,17 @@ jobs:
     environment: production
     steps:
     - name: Checkout code
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v6
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v4
+      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
       with:
         terraform_version: ${{ env.TF_VERSION }}
 
