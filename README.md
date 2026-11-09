@@ -198,6 +198,10 @@ GitHub Actions (`.github/workflows/ci-cd.yml`):
 └── Makefile
 ```
 
+## Author
+
+Author: Andrey Lesnikov, Senior DevOps & AI Platform Engineer, [https://orcid.org/0009-0004-7583-4314](https://orcid.org/0009-0004-7583-4314)
+
 ## License
 
 MIT License — see [LICENSE](LICENSE).
